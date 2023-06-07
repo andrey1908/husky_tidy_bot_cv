@@ -30,10 +30,10 @@ class BoxSegmentator:
 
 
 class BoxPoseEstimator:
-    def __init__(self, edges_sizes, num_edge_points, voxel_size, depth_scale, K, D,
+    def __init__(self, edges_sizes, edge_points_per_cm, voxel_size, depth_scale, K, D,
             mutual_filter, global_max_dist, global_checker_max_dist, max_dist):
         self.edges_sizes = edges_sizes
-        self.num_edge_points = num_edge_points
+        self.edge_points_per_cm = edge_points_per_cm
         self.voxel_size = voxel_size
         self.depth_scale = depth_scale
         self.K = K
@@ -98,8 +98,8 @@ class BoxPoseEstimator:
         face_axes_indices = np.delete(np.array([0, 1, 2]), axis_index)
         face_edges_sizes = self.edges_sizes[face_axes_indices]
         face = np.mgrid[
-            -face_edges_sizes[0] / 2 : face_edges_sizes[0] / 2 : self.num_edge_points * 1j,
-            -face_edges_sizes[1] / 2 : face_edges_sizes[1] / 2 : self.num_edge_points * 1j]
+            -face_edges_sizes[0] / 2 : face_edges_sizes[0] / 2 : face_edges_sizes[0] * 100 * self.edge_points_per_cm * 1j,
+            -face_edges_sizes[1] / 2 : face_edges_sizes[1] / 2 : face_edges_sizes[1] * 100 * self.edge_points_per_cm * 1j]
         face = face.reshape(2, -1).swapaxes(0, 1)
         face = np.hstack((face, np.full((len(face), 1), displacement)))
         axes_order = np.hstack((face_axes_indices, axis_index))
