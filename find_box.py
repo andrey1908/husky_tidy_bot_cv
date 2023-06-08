@@ -31,17 +31,15 @@ class BoxSegmentator:
 
 class BoxPoseEstimator:
     def __init__(self, edges_sizes, edge_points_per_cm, voxel_size, depth_scale, K, D,
-            mutual_filter, global_max_dist, global_checker_max_dist, max_dist):
+            global_max_correspondence_distance, max_correspondence_distances):
         self.edges_sizes = edges_sizes
         self.edge_points_per_cm = edge_points_per_cm
         self.voxel_size = voxel_size
         self.depth_scale = depth_scale
         self.K = K
         self.D = D
-        self.mutual_filter = mutual_filter
-        self.global_max_dist = global_max_dist
-        self.global_checker_max_dist = global_checker_max_dist
-        self.max_dist = max_dist
+        self.global_max_correspondence_distance = global_max_correspondence_distance
+        self.max_correspondence_distances = max_correspondence_distances
 
         self.box_pc = self._get_box_pc()
         self.box_pc_down, self.box_fpfh = self._prepare_pc(self.box_pc)
@@ -52,20 +50,19 @@ class BoxPoseEstimator:
             return None, None, None, None
         extracted_box_pc_down, extracted_box_fpfh = self._prepare_pc(extracted_box_pc)
 
-        global_reg = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
+        global_reg = o3d.pipelines.registration.registration_fgr_based_on_feature_matching(
             self.box_pc_down, extracted_box_pc_down, self.box_fpfh, extracted_box_fpfh,
-            self.mutual_filter, self.global_max_dist,
-            estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(),
-            ransac_n=3, checkers=[
-                o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
-                o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(
-                    self.global_checker_max_dist)],
-            criteria=o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999))
+            option=o3d.pipelines.registration.FastGlobalRegistrationOption(
+                maximum_correspondence_distance=self.global_max_correspondence_distance))
 
-        transform_init = global_reg.transformation
-        reg = o3d.pipelines.registration.registration_icp(
-            self.box_pc, extracted_box_pc, self.max_dist, init=transform_init,
-            estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint())
+        pose = global_reg.transformation
+        for max_correspondence_distance in self.max_correspondence_distances:
+            transform_init = pose
+            reg = o3d.pipelines.registration.registration_icp(
+                self.box_pc, extracted_box_pc,
+                max_correspondence_distance, init=transform_init,
+                estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint())
+            pose = reg.transformation
 
         return global_reg, reg, extracted_box_pc, extracted_box_pc_down
 
