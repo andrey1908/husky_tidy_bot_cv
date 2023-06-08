@@ -4,7 +4,7 @@ import open3d as o3d
 from segment_by_color import refine_mask_by_polygons
 
 
-class ObjectPoseEstimator:
+class ObjectPoseEstimation:
     def __init__(self, voxel_size, depth_scale, K, D,
             global_max_correspondence_distance, max_correspondence_distances):
         self.voxel_size = voxel_size
@@ -60,7 +60,7 @@ class ObjectPoseEstimator:
         return pc_down, fpfh
 
 
-class BoxSegmentator:
+class BoxSegmentation:
     def __init__(self, erosion_size):
         self.erosion_size = erosion_size
 
@@ -85,7 +85,7 @@ class BoxSegmentator:
         return box_mask
 
 
-class BoxPoseEstimator(ObjectPoseEstimator):
+class BoxPoseEstimation(ObjectPoseEstimation):
     def __init__(self, edges_sizes, edge_points_per_cm, voxel_size, depth_scale, K, D,
             global_max_correspondence_distance, max_correspondence_distances):
         super().__init__(voxel_size, depth_scale, K, D,
