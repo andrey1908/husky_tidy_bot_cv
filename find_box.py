@@ -14,7 +14,7 @@ class ObjectPoseEstimator:
         self.global_max_correspondence_distance = global_max_correspondence_distance
         self.max_correspondence_distances = max_correspondence_distances
 
-    def estimate_box_pose(self, mask, depth):
+    def estimate_pose(self, mask, depth):
         extracted_pc = self._extract_pc(mask, depth)
         if len(extracted_pc.points) < 1000:
             return None, None, None, None
