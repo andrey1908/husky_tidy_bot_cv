@@ -15,28 +15,27 @@ class ObjectPoseEstimator:
         self.max_correspondence_distances = max_correspondence_distances
 
     def estimate_pose(self, mask, depth):
-        extracted_pc = self._extract_pc(mask, depth)
-        if len(extracted_pc.points) < 1000:
-            return None, None, None, None
-        extracted_pc_down, extracted_fpfh = self._prepare_pc(extracted_pc)
+        self.extracted_pc = self.extract_pc(mask, depth)
+        if len(self.extracted_pc.points) < 1000:
+            return None
+        self.extracted_pc_down, extracted_fpfh = self._prepare_pc(self.extracted_pc)
 
         global_reg = o3d.pipelines.registration.registration_fgr_based_on_feature_matching(
-            self.gt_pc_down, extracted_pc_down, self.gt_fpfh, extracted_fpfh,
+            self.gt_pc_down, self.extracted_pc_down, self.gt_fpfh, extracted_fpfh,
             option=o3d.pipelines.registration.FastGlobalRegistrationOption(
                 maximum_correspondence_distance=self.global_max_correspondence_distance))
 
         pose = global_reg.transformation
         for max_correspondence_distance in self.max_correspondence_distances:
-            transform_init = pose
             reg = o3d.pipelines.registration.registration_icp(
-                self.gt_pc, extracted_pc,
-                max_correspondence_distance, init=transform_init,
+                self.gt_pc, self.extracted_pc,
+                max_correspondence_distance, init=pose,
                 estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint())
             pose = reg.transformation
 
-        return global_reg, reg, extracted_pc, extracted_pc_down
+        return pose
 
-    def _extract_pc(self, mask, depth):
+    def extract_pc(self, mask, depth):
         depth[mask == 0] = 0
         depth = o3d.geometry.Image(depth)
         height, width = mask.shape[:2]
