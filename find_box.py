@@ -119,8 +119,8 @@ class BoxPoseEstimator(ObjectPoseEstimator):
         face_axes_indices = np.delete(np.array([0, 1, 2]), axis_index)
         face_edges_sizes = self.edges_sizes[face_axes_indices]
         face = np.mgrid[
-            -face_edges_sizes[0] / 2 : face_edges_sizes[0] / 2 : face_edges_sizes[0] * 100 * self.edge_points_per_cm * 1j,
-            -face_edges_sizes[1] / 2 : face_edges_sizes[1] / 2 : face_edges_sizes[1] * 100 * self.edge_points_per_cm * 1j]
+            -face_edges_sizes[0] / 2 : face_edges_sizes[0] / 2 : int(face_edges_sizes[0] * 100 * self.edge_points_per_cm) * 1j,
+            -face_edges_sizes[1] / 2 : face_edges_sizes[1] / 2 : int(face_edges_sizes[1] * 100 * self.edge_points_per_cm) * 1j]
         face = face.reshape(2, -1).swapaxes(0, 1)
         face = np.hstack((face, np.full((len(face), 1), displacement)))
         axes_order = np.hstack((face_axes_indices, axis_index))
