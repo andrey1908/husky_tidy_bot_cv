@@ -20,18 +20,18 @@ class ObjectPoseEstimation:
             return None
         self.extracted_pc_down, extracted_fpfh = self._prepare_pc(self.extracted_pc)
 
-        global_reg = o3d.pipelines.registration.registration_fgr_based_on_feature_matching(
+        self.global_reg = o3d.pipelines.registration.registration_fgr_based_on_feature_matching(
             self.gt_pc_down, self.extracted_pc_down, self.gt_fpfh, extracted_fpfh,
             option=o3d.pipelines.registration.FastGlobalRegistrationOption(
                 maximum_correspondence_distance=self.global_max_correspondence_distance))
 
-        pose = global_reg.transformation
+        pose = self.global_reg.transformation
         for max_correspondence_distance in self.max_correspondence_distances:
-            reg = o3d.pipelines.registration.registration_icp(
+            self.reg = o3d.pipelines.registration.registration_icp(
                 self.gt_pc, self.extracted_pc,
                 max_correspondence_distance, init=pose,
                 estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint())
-            pose = reg.transformation
+            pose = self.reg.transformation
 
         return pose
 
