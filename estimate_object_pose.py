@@ -17,18 +17,27 @@ class ObjectPoseEstimation:
     def estimate_pose(self, mask, depth):
         self.extracted_pc = self.extract_pc(mask, depth)
         if len(self.extracted_pc.points) < 1000:
+            self.reason = \
+                f"Too few points in extracted point cloud " \
+                f"({len(self.extracted_pc.points)} points)"
             return None
         self.extracted_pc_down, extracted_fpfh = self._prepare_pc(self.extracted_pc)
+        if self.extracted_pc_down is None:
+            return None
 
-        self.global_reg = o3d.pipelines.registration.registration_fgr_based_on_feature_matching(
-            self.gt_pc_down, self.extracted_pc_down, self.gt_fpfh, extracted_fpfh,
-            option=o3d.pipelines.registration.FastGlobalRegistrationOption(
-                maximum_correspondence_distance=self.global_max_correspondence_distance))
+        try:
+            self.global_reg = o3d.pipelines.registration.registration_fgr_based_on_feature_matching(
+                self.gt_pc_down, self.extracted_pc_down, self.gt_fpfh, extracted_fpfh,
+                option=o3d.pipelines.registration.FastGlobalRegistrationOption(
+                    maximum_correspondence_distance=self.global_max_correspondence_distance))
+        except:
+            self.reason = "Global registration failed"
+            return None
 
         pose = self.global_reg.transformation
         for max_correspondence_distance in self.max_correspondence_distances:
             self.reg = o3d.pipelines.registration.registration_icp(
-                self.gt_pc, self.extracted_pc,
+                self.gt_pc_down, self.extracted_pc_down,
                 max_correspondence_distance, init=pose,
                 estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint())
             pose = self.reg.transformation
@@ -47,13 +56,28 @@ class ObjectPoseEstimation:
 
     def _init_gt_pc(self):
         self.gt_pc = self._get_gt_pc()
-        self.gt_pc_down, self.gt_fpfh = self._prepare_pc(self.gt_pc)
+        self.gt_pc_down, self.gt_fpfh = self._prepare_pc(self.gt_pc, no_noise_allowed=True)
 
     def _get_gt_pc(self):
         raise NotImplementedError()
 
-    def _prepare_pc(self, pc):
+    def _prepare_pc(self, pc, no_noise_allowed=False):
         pc_down = pc.voxel_down_sample(self.voxel_size)
+
+        pc_clusters_labels = pc_down.cluster_dbscan(self.voxel_size * 2, 0)
+        pc_clusters_labels = np.array(pc_clusters_labels)
+        unique_labels, counts = np.unique(pc_clusters_labels, return_counts=True)
+        if no_noise_allowed:
+            assert -1 not in unique_labels, \
+                "There are noise points after clustering " \
+                "and no_noise_allowed is True"
+        label = unique_labels[np.argmax(counts)]
+        if label == -1:
+            self.reason = "Too many noise points after clustering"
+            return None, None
+        indices = np.where(pc_clusters_labels == label)[0]
+        pc_down = pc_down.select_by_index(indices)
+
         pc_down.estimate_normals(search_param=
             o3d.geometry.KDTreeSearchParamHybrid(radius=self.voxel_size * 2, max_nn=30))
         fpfh = o3d.pipelines.registration.compute_fpfh_feature(pc_down,
@@ -64,24 +88,48 @@ class ObjectPoseEstimation:
 class BoxSegmentation:
     def __init__(self, erosion_size):
         self.erosion_size = erosion_size
+        if self.erosion_size > 0:
+            self.erosion_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                (2 * self.erosion_size + 1, 2 * self.erosion_size + 1),
+                (self.erosion_size, self.erosion_size))
 
-    def segment_box(self, image):
+    def segment_box(self, image, box):
+        assert box in ("white", "green")
+        if box == "white":
+            return self.segment_white_box(image)
+        if box == "green":
+            return self.segment_green_box(image)
+
+    def segment_white_box(self, image):
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV_FULL)
-        min_color = np.array([165, 50, 60], dtype=np.uint8)
-        max_color = np.array([220, 255, 255], dtype=np.uint8)
+        min_color = np.array([175, 40, 30], dtype=np.uint8)
+        max_color = np.array([240, 255, 255], dtype=np.uint8)
         mask = cv2.inRange(hsv, min_color, max_color)
         refined_mask, _ = refine_mask_by_polygons(
-            mask, min_polygon_length=500, max_polygon_length=10000)
+            mask, min_polygon_length=500, max_polygon_length=10000,
+            select_top_n_polygons_by_length=1)
         box_mask = (mask == 0) & (refined_mask != 0)
         box_mask = box_mask.astype(np.uint8) * 255
         box_mask, _ = refine_mask_by_polygons(
-            box_mask, min_polygon_length=200, max_polygon_length=2000)
+            box_mask, min_polygon_length=200, max_polygon_length=2000,
+            select_top_n_polygons_by_length=1)
 
         if self.erosion_size > 0:
-            element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                (2 * self.erosion_size + 1, 2 * self.erosion_size + 1),
-                (self.erosion_size, self.erosion_size))
-            box_mask = cv2.erode(box_mask, element)
+            box_mask = cv2.erode(box_mask, self.erosion_element)
+
+        return box_mask
+
+    def segment_green_box(self, image):
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV_FULL)
+        min_color = np.array([80, 40, 30], dtype=np.uint8)
+        max_color = np.array([140, 255, 255], dtype=np.uint8)
+        mask = cv2.inRange(hsv, min_color, max_color)
+        box_mask, _ = refine_mask_by_polygons(
+            mask, min_polygon_length=300, max_polygon_length=4000,
+            min_polygon_area_length_ratio=20, select_top_n_polygons_by_length=1)
+
+        if self.erosion_size > 0:
+            box_mask = cv2.erode(box_mask, self.erosion_element)
 
         return box_mask
 
