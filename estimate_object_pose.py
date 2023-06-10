@@ -36,6 +36,7 @@ class ObjectPoseEstimation:
         return pose
 
     def extract_pc(self, mask, depth):
+        depth = depth.copy()
         depth[mask == 0] = 0
         depth = o3d.geometry.Image(depth)
         height, width = mask.shape[:2]
