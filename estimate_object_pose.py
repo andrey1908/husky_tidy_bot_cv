@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import open3d as o3d
-from segment_by_color import refine_mask_by_polygons
+from segment_by_color import refine_mask_by_polygons, get_sv
 
 
 class ObjectPoseEstimation:
@@ -94,11 +94,13 @@ class BoxSegmentation:
                 (self.erosion_size, self.erosion_size))
 
     def segment_box(self, image, box):
-        assert box in ("white", "green")
+        assert box in ("white", "green", "red")
         if box == "white":
             return self.segment_white_box(image)
         if box == "green":
             return self.segment_green_box(image)
+        if box == "red":
+            return self.segment_red_box(image)
 
     def segment_white_box(self, image):
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV_FULL)
@@ -124,6 +126,24 @@ class BoxSegmentation:
         min_color = np.array([80, 40, 30], dtype=np.uint8)
         max_color = np.array([140, 255, 255], dtype=np.uint8)
         mask = cv2.inRange(hsv, min_color, max_color)
+        box_mask, _ = refine_mask_by_polygons(
+            mask, min_polygon_length=300, max_polygon_length=4000,
+            min_polygon_area_length_ratio=20, select_top_n_polygons_by_length=1)
+
+        if self.erosion_size > 0:
+            box_mask = cv2.erode(box_mask, self.erosion_element)
+
+        return box_mask
+
+    def segment_red_box(self, image):
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV_FULL)
+        hsv[:, :, 0] += 100
+        min_color = np.array([80, 50], dtype=np.uint8)
+        max_color = np.array([110, 255], dtype=np.uint8)
+        h = hsv[:, :, 0]
+        sv = get_sv(hsv)
+        h_sv = np.dstack((h, sv))
+        mask = cv2.inRange(h_sv, min_color, max_color)
         box_mask, _ = refine_mask_by_polygons(
             mask, min_polygon_length=300, max_polygon_length=4000,
             min_polygon_area_length_ratio=20, select_top_n_polygons_by_length=1)
