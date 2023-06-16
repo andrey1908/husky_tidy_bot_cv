@@ -22,13 +22,13 @@ class VILD_CLIP:
         self.crop_padding_size = crop_padding_size
 
         self.model, self.preprocess = clip.load("ViT-B/32")
-        self.session = tf.Session(graph=tf.Graph())
-        tf.saved_model.loader.load(self.session, ['serve'], self.vild_folder)
+        self.sess = tf.Session(graph=tf.Graph())
+        tf.saved_model.loader.load(self.sess, ['serve'], self.vild_folder)
 
     def run(self, image_file, categories, reject_categories=tuple()):
         categories = np.array(categories)
         roi_boxes, roi_scores, detection_boxes, scores_unused, \
-        box_outputs, detection_masks, visual_features, image_info = self.session.run([
+        box_outputs, detection_masks, visual_features, image_info = self.sess.run([
             'RoiBoxes:0', 'RoiScores:0', '2ndStageBoxes:0', '2ndStageScoresUnused:0',
             'BoxOutputs:0', 'MaskOutputs:0', 'VisualFeatOutputs:0', 'ImageInfo:0'],
                 feed_dict={'Placeholder:0': [image_file,]})
