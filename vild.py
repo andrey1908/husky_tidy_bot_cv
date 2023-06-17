@@ -114,11 +114,11 @@ class VILD_CLIP:
         segmentations = segmentations[selected_indices]
         scores = scores[selected_indices]
 
-        ymin, xmin, ymax, xmax = np.split(rescaled_detection_boxes, 4, axis=-1)
-        processed_boxes = np.concatenate([xmin, ymin, xmax - xmin, ymax - ymin], axis=-1)
-        masks = VILD_CLIP.paste_instance_masks(
-            detection_masks, processed_boxes, image_height, image_width)
-        masks *= 255
+        # ymin, xmin, ymax, xmax = np.split(rescaled_detection_boxes, 4, axis=-1)
+        # processed_boxes = np.concatenate([xmin, ymin, xmax - xmin, ymax - ymin], axis=-1)
+        # masks = VILD_CLIP.paste_instance_masks(
+        #     detection_masks, processed_boxes, image_height, image_width)
+        # masks *= 255
 
         return rescaled_detection_boxes, roi_scores, segmentations, scores
 
@@ -224,7 +224,7 @@ class VILD_CLIP:
             image_width: an integer representing the width of the image.
 
         Returns:
-            segms: a numpy array of shape [N, image_height, image_width] representing
+            segmentations: a numpy array of shape [N, image_height, image_width] representing
             the instance masks *pasted* on the image canvas.
         """
 
@@ -241,7 +241,7 @@ class VILD_CLIP:
         ref_boxes = VILD_CLIP.expand_boxes(detected_boxes, scale)
         ref_boxes = ref_boxes.astype(np.int32)
         padded_mask = np.zeros((mask_height + 2, mask_width + 2), dtype=np.float32)
-        segms = []
+        segmentations = []
         for mask_ind, mask in enumerate(masks):
             im_mask = np.zeros((image_height, image_width), dtype=np.uint8)
             # Process mask inside bounding boxes.
@@ -265,8 +265,8 @@ class VILD_CLIP:
                 (y_0 - ref_box[1]):(y_1 - ref_box[1]),
                 (x_0 - ref_box[0]):(x_1 - ref_box[0])
             ]
-            segms.append(im_mask)
+            segmentations.append(im_mask)
 
-        segms = np.array(segms)
-        assert masks.shape[0] == segms.shape[0]
-        return segms 
+        segmentations = np.array(segmentations)
+        assert masks.shape[0] == segmentations.shape[0]
+        return segmentations
