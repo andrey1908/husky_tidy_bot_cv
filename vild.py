@@ -25,6 +25,28 @@ class VILD_CLIP:
         self.sess = tf.Session(graph=tf.Graph())
         tf.saved_model.loader.load(self.sess, ['serve'], self.vild_folder)
 
+    @staticmethod
+    def modify_VLID_graph(vild_folder):
+        with tf.Session(graph=tf.Graph()) as sess:
+            tf.saved_model.loader.load(sess, ['serve'], vild_folder)
+            modified_graph_def = tf.GraphDef()
+            for node in sess.graph.as_graph_def().node:
+                new_node = tf.NodeDef()
+                new_node.CopyFrom(node)
+                if new_node.name == "Placeholder":
+                    new_node.attr['dtype'].type = tf.uint8.as_datatype_enum
+                    new_node.attr['shape'].shape.CopyFrom(tf.TensorShape((None, None, 3)).as_proto())
+                elif new_node.name == "Squeeze":
+                    continue
+                elif new_node.name == "ReadFile":
+                    continue
+                elif new_node.name == "decode_image/DecodeImage":
+                    continue
+                elif new_node.name == "convert_image/Cast":
+                    new_node.input[0] = "Placeholder"
+                modified_graph_def.node.extend([new_node])
+        return modified_graph_def
+
     def run(self, image_file, categories, reject_categories=tuple()):
         categories = np.array(categories)
         roi_boxes, roi_scores, detection_boxes, scores_unused, \
