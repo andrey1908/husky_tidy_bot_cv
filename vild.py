@@ -11,7 +11,7 @@ import cv2
 class VILD_CLIP:
     def __init__(self, vild_folder, nms_threshold=0.5, min_rpn_score_thresh=0.9,
             min_box_area=100, min_score=0.6, use_clip_embeddings=True,
-            mask_out_cropped_images=True, crop_padding_size=50):
+            mask_out_cropped_images=True, crop_padding_size=20):
         self.vild_folder = vild_folder
         self.nms_threshold = nms_threshold
         self.min_rpn_score_thresh = min_rpn_score_thresh
@@ -114,12 +114,6 @@ class VILD_CLIP:
         segmentations = segmentations[selected_indices]
         scores = scores[selected_indices]
 
-        # ymin, xmin, ymax, xmax = np.split(rescaled_detection_boxes, 4, axis=-1)
-        # processed_boxes = np.concatenate([xmin, ymin, xmax - xmin, ymax - ymin], axis=-1)
-        # masks = VILD_CLIP.paste_instance_masks(
-        #     detection_masks, processed_boxes, image_height, image_width)
-        # masks *= 255
-
         return rescaled_detection_boxes, roi_scores, segmentations, scores
 
     def build_text_embeddings(self, text):
@@ -133,24 +127,39 @@ class VILD_CLIP:
 
     def build_visual_embeddings(self, image,
             rescaled_detection_boxes, segmentations):
+        image_height = image.shape[0]
+        image_width = image.shape[1]
+        background_image_height = image_height + self.crop_padding_size * 2
+        background_image_width = image_width + self.crop_padding_size * 2
+        background_image = np.zeros((background_image_height, background_image_width, 3),
+            dtype=np.uint8)
+        background_image[
+            self.crop_padding_size:image_height+self.crop_padding_size,
+            self.crop_padding_size:image_width+self.crop_padding_size] = image
+        for mask in segmentations:
+            background_image[
+                self.crop_padding_size:image_height+self.crop_padding_size,
+                self.crop_padding_size:image_width+self.crop_padding_size][mask != 0] = 0
+
         with torch.no_grad():
-            prep_crops = list()
+            prepared_crops = list()
             for bbox, mask in zip(rescaled_detection_boxes, segmentations):
-                y1 = int(np.floor(bbox[0]))
-                x1 = int(np.floor(bbox[1]))
-                y2 = int(np.ceil(bbox[2]))
-                x2 = int(np.ceil(bbox[3]))
+                y1 = max(0, int(np.floor(bbox[0])))
+                x1 = max(0, int(np.floor(bbox[1])))
+                y2 = min(image_height, int(np.ceil(bbox[2])))
+                x2 = min(image_width, int(np.ceil(bbox[3])))
                 crop = np.copy(image[y1:y2, x1:x2])
-                if self.mask_out_cropped_images:
-                    crop[mask[y1:y2, x1:x2] == 0] = 0
-                if self.crop_padding_size > 0:
-                    pad_size = self.crop_padding_size
-                    pad_size = ((pad_size, pad_size), (pad_size, pad_size), (0, 0))
-                    crop = np.pad(crop, pad_size)
-                prep_crop = self.preprocess(Image.fromarray(crop)).cuda()
-                prep_crops.append(prep_crop)
-            prep_crops = torch.stack(prep_crops, dim=0)
-            embeddings = self.model.encode_image(prep_crops).cpu().numpy()
+                crop_with_background = background_image[
+                    y1:y2+self.crop_padding_size*2,
+                    x1:x2+self.crop_padding_size*2].copy()
+                crop_with_background[
+                    self.crop_padding_size:(y2-y1)+self.crop_padding_size,
+                    self.crop_padding_size:(x2-x1)+self.crop_padding_size][mask[y1:y2, x1:x2] != 0] = \
+                        crop[mask[y1:y2, x1:x2] != 0]
+                prepared_crop = self.preprocess(Image.fromarray(crop_with_background)).cuda()
+                prepared_crops.append(prepared_crop)
+            prepared_crops = torch.stack(prepared_crops, dim=0)
+            embeddings = self.model.encode_image(prepared_crops).cpu().numpy()
         embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
         return embeddings
 
