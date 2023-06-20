@@ -6,6 +6,10 @@ from PIL import Image
 from scipy.special import softmax
 import tensorflow.compat.v1 as tf
 import cv2
+import collections
+import PIL.ImageColor as ImageColor
+import PIL.ImageDraw as ImageDraw
+import PIL.ImageFont as ImageFont
 
 
 class VILD_CLIP:
@@ -279,3 +283,162 @@ class VILD_CLIP:
         segmentations = np.array(segmentations)
         assert masks.shape[0] == segmentations.shape[0]
         return segmentations
+
+    @staticmethod
+    def draw_detections(image, rescaled_detection_boxes, segmentations,
+            roi_scores=None, scores=None):
+        box_to_display_str_map = collections.defaultdict(list)
+        box_to_color_map = collections.defaultdict(str)
+        box_to_instance_masks_map = {}
+        box_to_score_map = {}
+
+        for i in range(rescaled_detection_boxes.shape[0]):
+            box = tuple(rescaled_detection_boxes[i].tolist())
+            box_to_instance_masks_map[box] = segmentations[i]
+            box_to_color_map[box] = 'red'
+            box_to_score_map[box] = roi_scores[i]
+            box_to_display_str_map[box] = [
+                f"roi score: {roi_scores[i] * 100:.02f}%, "
+                f"category score: {np.max(scores[i]) * 100:.02f}%"]
+
+        box_color_iter = sorted(
+            box_to_color_map.items(), key=lambda kv: box_to_score_map[kv[0]])
+
+        for box, color in box_color_iter:
+            ymin, xmin, ymax, xmax = box
+            VILD_CLIP.draw_mask_on_image_array(image, box_to_instance_masks_map[box],
+                color=color, alpha=0.4)
+            VILD_CLIP.draw_bounding_box_on_image_array(image, ymin, xmin, ymax, xmax,
+                color=color, thickness=4, display_str_list=box_to_display_str_map[box],
+                use_normalized_coordinates=False)
+
+        return image
+
+    @staticmethod
+    def draw_mask_on_image_array(image, mask, color='red', alpha=0.4):
+        """Draws mask on an image.
+
+        Args:
+            image: uint8 numpy array with shape (img_height, img_height, 3)
+            mask: a uint8 numpy array of shape (img_height, img_height) with
+            values between either 0 or 1.
+            color: color to draw the keypoints with. Default is red.
+            alpha: transparency value between 0 and 1. (default: 0.4)
+
+        Raises:
+            ValueError: On incorrect data type for image or masks.
+        """
+        if image.dtype != np.uint8:
+            raise ValueError('`image` not of type np.uint8')
+        if mask.dtype != np.uint8:
+            raise ValueError('`mask` not of type np.uint8')
+        if np.any(np.logical_and(mask != 1, mask != 0)):
+            raise ValueError('`mask` elements should be in [0, 1]')
+        if image.shape[:2] != mask.shape:
+            raise ValueError('The image has spatial dimensions %s but the mask has '
+                            'dimensions %s' % (image.shape[:2], mask.shape))
+        rgb = ImageColor.getrgb(color)
+        pil_image = Image.fromarray(image)
+
+        solid_color = np.expand_dims(
+            np.ones_like(mask), axis=2) * np.reshape(list(rgb), [1, 1, 3])
+        pil_solid_color = Image.fromarray(np.uint8(solid_color)).convert('RGBA')
+        pil_mask = Image.fromarray(np.uint8(255.0*alpha*mask)).convert('L')
+        pil_image = Image.composite(pil_solid_color, pil_image, pil_mask)
+        np.copyto(image, np.array(pil_image.convert('RGB')))
+
+    @staticmethod
+    def draw_bounding_box_on_image_array(image, ymin, xmin, ymax, xmax,
+            color='red', thickness=4, display_str_list=(), use_normalized_coordinates=True):
+        """Adds a bounding box to an image (numpy array).
+
+        Bounding box coordinates can be specified in either absolute (pixel) or
+        normalized coordinates by setting the use_normalized_coordinates argument.
+
+        Args:
+            image: a numpy array with shape [height, width, 3].
+            ymin: ymin of bounding box.
+            xmin: xmin of bounding box.
+            ymax: ymax of bounding box.
+            xmax: xmax of bounding box.
+            color: color to draw bounding box. Default is red.
+            thickness: line thickness. Default value is 4.
+            display_str_list: list of strings to display in box
+                            (each to be shown on its own line).
+            use_normalized_coordinates: If True (default), treat coordinates
+            ymin, xmin, ymax, xmax as relative to the image.  Otherwise treat
+            coordinates as absolute.
+        """
+        image_pil = Image.fromarray(np.uint8(image)).convert('RGB')
+        VILD_CLIP.draw_bounding_box_on_image(image_pil, ymin, xmin, ymax, xmax, color,
+                                    thickness, display_str_list,
+                                    use_normalized_coordinates)
+        np.copyto(image, np.array(image_pil))
+
+    @staticmethod
+    def draw_bounding_box_on_image(image, ymin, xmin, ymax, xmax,
+            color='red', thickness=4, display_str_list=(), use_normalized_coordinates=True):
+        """Adds a bounding box to an image.
+
+        Bounding box coordinates can be specified in either absolute (pixel) or
+        normalized coordinates by setting the use_normalized_coordinates argument.
+
+        Each string in display_str_list is displayed on a separate line above the
+        bounding box in black text on a rectangle filled with the input 'color'.
+        If the top of the bounding box extends to the edge of the image, the strings
+        are displayed below the bounding box.
+
+        Args:
+            image: a PIL.Image object.
+            ymin: ymin of bounding box.
+            xmin: xmin of bounding box.
+            ymax: ymax of bounding box.
+            xmax: xmax of bounding box.
+            color: color to draw bounding box. Default is red.
+            thickness: line thickness. Default value is 4.
+            display_str_list: list of strings to display in box
+                            (each to be shown on its own line).
+            use_normalized_coordinates: If True (default), treat coordinates
+            ymin, xmin, ymax, xmax as relative to the image.  Otherwise treat
+            coordinates as absolute.
+        """
+        draw = ImageDraw.Draw(image)
+        im_width, im_height = image.size
+        if use_normalized_coordinates:
+            (left, right, top, bottom) = (xmin * im_width, xmax * im_width,
+                                        ymin * im_height, ymax * im_height)
+        else:
+            (left, right, top, bottom) = (xmin, xmax, ymin, ymax)
+        draw.line([(left, top), (left, bottom), (right, bottom),
+                    (right, top), (left, top)], width=thickness, fill=color)
+        try:
+            font = ImageFont.truetype('arial.ttf', 24)
+        except IOError:
+            font = ImageFont.load_default()
+
+        # If the total height of the display strings added to the top of the bounding
+        # box exceeds the top of the image, stack the strings below the bounding box
+        # instead of above.
+        display_str_heights = [font.getsize(ds)[1] for ds in display_str_list]
+        # Each display_str has a top and bottom margin of 0.05x.
+        total_display_str_height = (1 + 2 * 0.05) * sum(display_str_heights)
+
+        if top > total_display_str_height:
+            text_bottom = top
+        else:
+            text_bottom = bottom + total_display_str_height
+        # Reverse list and print from bottom to top.
+        for display_str in display_str_list[::-1]:
+            text_left = min(5, left)
+            text_width, text_height = font.getsize(display_str)
+            margin = np.ceil(0.05 * text_height)
+            draw.rectangle(
+                [(left, text_bottom - text_height - 2 * margin), (left + text_width,
+                                                                text_bottom)],
+                fill=color)
+            draw.text(
+                (left + margin, text_bottom - text_height - margin),
+                display_str,
+                fill='black',
+                font=font)
+            text_bottom -= text_height - 2 * margin
