@@ -194,3 +194,22 @@ class BoxPoseEstimation(ObjectPoseEstimation):
         axes_order = np.hstack((face_axes_indices, axis_index))
         face[:, axes_order] = face[:, [0, 1, 2]]
         return face
+
+    @staticmethod
+    def align_box_poses(ref_box_pose, box_pose):
+        box_pose = box_pose.copy()
+        ref_z = ref_box_pose[:3, 2]
+        z = box_pose[:3, 2]
+        if np.dot(ref_z, z) < 0:
+            correction, _ = cv2.Rodrigues(np.array([np.pi, 0, 0]))
+            box_pose_rotation = box_pose[:3, :3]
+            np.matmul(box_pose_rotation, correction, out=box_pose_rotation)
+
+        ref_x = ref_box_pose[:3, 0]
+        x = box_pose[:3, 0]
+        if np.dot(ref_x, x) < 0:
+            correction, _ = cv2.Rodrigues(np.array([0, 0, np.pi]))
+            box_pose_rotation = box_pose[:3, :3]
+            np.matmul(box_pose_rotation, correction, out=box_pose_rotation)
+
+        return box_pose
