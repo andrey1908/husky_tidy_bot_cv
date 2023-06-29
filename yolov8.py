@@ -34,4 +34,4 @@ class YOLOv8(YOLO):
     @staticmethod
     def draw_detections(image, scores, classes_ids, boxes, masks, palette=((0, 0, 255),)):
         draw_detections(image, scores, classes_ids, boxes, masks,
-            palette=((0, 0, 255),), min_score=0)
+            draw_boxes=False, draw_masks=True, palette=((0, 0, 255),), min_score=0)
