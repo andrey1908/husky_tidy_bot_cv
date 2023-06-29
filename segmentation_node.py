@@ -9,12 +9,12 @@ from yolov8 import YOLOv8
 
 class YOLOv8_node(YOLOv8):
     def __init__(self, model_file, weights_file, image_topic, out_segmentation_topic,
-            min_score=0.7, colorful=False, palette=((0, 0, 255),)):
+            min_score=0.7, visualization=False, palette=((0, 0, 255),)):
         super().__init__(model_file, weights_file, min_score=min_score)
 
         self.image_topic = image_topic
         self.out_segmentation_topic = out_segmentation_topic
-        self.colorful = colorful
+        self.visualization = visualization
         self.palette = palette
 
         self.segmentation_pub = rospy.Publisher(self.out_segmentation_topic, Image, queue_size=10)
@@ -33,19 +33,16 @@ class YOLOv8_node(YOLOv8):
 
         scores, classes_ids, boxes, masks = self.run(image)
 
-        if self.colorful:
-            segmentation = np.zeros_like(image)
+        if self.visualization:
+            YOLOv8.draw_detections(image, scores, classes_ids, boxes, masks,
+                palette=self.palette)
+            segmentation = image
         else:
             height, width = image.shape[:2]
             segmentation = np.zeros((height, width), dtype=np.uint16)
-        for i, (score, class_id, mask) in enumerate(zip(scores, classes_ids, masks)):
-            if score < self.min_score:
-                continue
-            if self.colorful:
-                obj = np.array(self.palette[i % len(self.palette)], dtype=np.uint8)
-            else:
+            for i, (class_id, mask) in enumerate(zip(classes_ids, masks)):
                 obj = (class_id << 8) + i + 1
-            segmentation[mask != 0] = obj
+                segmentation[mask != 0] = obj
 
         segmentation_msg = self.bridge.cv2_to_imgmsg(segmentation, encoding='passthrough')
         segmentation_msg.header = image_msg.header
@@ -57,6 +54,6 @@ if __name__ == "__main__":
     segmentation_node = YOLOv8_node(
         "/home/cds-jetson-host/ultralytics/yolov8n-seg-1class.yaml",
         "/home/cds-jetson-host/ultralytics/runs/segment/train2/weights/last.pt",
-        "/camera/compressed", "/segmentation", colorful=False)
+        "/camera/compressed", "/segmentation", visualization=False)
     print("Spinning...")
     rospy.spin()
