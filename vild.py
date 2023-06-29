@@ -230,8 +230,6 @@ class VILD_CLIP:
                 color=color, thickness=4, display_str_list=box_to_display_str_map[box],
                 use_normalized_coordinates=False)
 
-        return image
-
     @staticmethod
     def _expand_boxes(boxes, scale):
         """ Expands an array of boxes by a given scale. """
