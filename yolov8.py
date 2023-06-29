@@ -18,7 +18,7 @@ class YOLOv8(YOLO):
         weights = torch.load(self.weights_file)['model']
         self.model.load(weights)
 
-    def run(self, image):
+    def segment(self, image):
         if isinstance(image, str):
             image = cv2.imread(image)
         results = self(image, save=False, show=False, verbose=False)

@@ -32,7 +32,7 @@ class YOLOv8_node(YOLOv8):
         else:
             raise RuntimeError("Unkown message type")
 
-        scores, classes_ids, boxes, masks = self.run(image)
+        scores, classes_ids, boxes, masks = self.segment(image)
 
         if self.visualization:
             YOLOv8.draw_detections(image, scores, classes_ids, boxes, masks, palette=self.palette)

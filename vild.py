@@ -51,7 +51,7 @@ class VILD_CLIP:
                 modified_graph_def.node.extend([new_node])
         return modified_graph_def
 
-    def run(self, image_file, categories, reject_categories=tuple()):
+    def segment(self, image_file, categories, reject_categories=tuple()):
         categories = np.array(categories)
         roi_boxes, roi_scores, detection_boxes, scores_unused, \
         box_outputs, detection_masks, visual_features, image_info = self.sess.run([
