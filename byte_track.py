@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from yolox.tracker.byte_tracker import BYTETracker
+from conversions import from_segmentation_image, to_tracking_image
 
 
 class ByteTrack:
@@ -48,3 +49,24 @@ class ByteTrack:
             if draw_boxes:
                 x1, y1, x2, y2 = list(map(int, tracked_object.tlbr))
                 cv2.rectangle(image, (x1, y1), (x2, y2), (255, 255, 255), 2)
+
+    @staticmethod
+    def from_segmentation_image(segmentation_image, default_score=0.9):
+        classes_ids, scores, boxes, masks = \
+            from_segmentation_image(segmentation_image, default_score=default_score)
+        return boxes, scores, classes_ids, masks
+
+    @staticmethod
+    def to_tracking_image(tracked_objects, out_shape):
+        if len(tracked_objects) == 0:
+            classes_ids = list()
+            tracking_ids = list()
+            masks = np.empty((0, *out_shape))
+        else:
+            classes_ids, tracking_ids, masks = \
+                zip(*[(class_id, tracked_object.track_id, tracked_object.mask)
+                    for tracked_object, class_id in tracked_objects])
+            masks = np.array(masks)
+            assert tuple(out_shape) == masks.shape[1:]
+        tracking_image = to_tracking_image(classes_ids, tracking_ids, masks)
+        return tracking_image

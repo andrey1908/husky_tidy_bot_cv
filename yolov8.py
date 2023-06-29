@@ -4,6 +4,7 @@ from ultralytics.yolo.utils.ops import preprocess_results
 from ultralytics.yolo.utils.visualization import draw_detections
 import numpy as np
 import cv2
+from conversions import to_segmentation_image
 
 
 class YOLOv8(YOLO):
@@ -35,3 +36,8 @@ class YOLOv8(YOLO):
     def draw_detections(image, scores, classes_ids, boxes, masks, palette=((0, 0, 255),)):
         draw_detections(image, scores, classes_ids, boxes, masks,
             draw_boxes=False, draw_masks=True, palette=((0, 0, 255),), min_score=0)
+
+    @staticmethod
+    def to_segmentation_image(classes_ids, masks):
+        segmentation_image = to_segmentation_image(classes_ids, masks)
+        return segmentation_image

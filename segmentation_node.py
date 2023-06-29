@@ -5,6 +5,7 @@ from cv_bridge import CvBridge
 import numpy as np
 import cv2
 from yolov8 import YOLOv8
+from conversions import to_segmentation_image
 
 
 class YOLOv8_node(YOLOv8):
@@ -34,17 +35,12 @@ class YOLOv8_node(YOLOv8):
         scores, classes_ids, boxes, masks = self.run(image)
 
         if self.visualization:
-            YOLOv8.draw_detections(image, scores, classes_ids, boxes, masks,
-                palette=self.palette)
-            segmentation = image
+            YOLOv8.draw_detections(image, scores, classes_ids, boxes, masks, palette=self.palette)
+            segmentation_image = image
         else:
-            height, width = image.shape[:2]
-            segmentation = np.zeros((height, width), dtype=np.uint16)
-            for i, (class_id, mask) in enumerate(zip(classes_ids, masks)):
-                obj = (class_id << 8) + i + 1
-                segmentation[mask != 0] = obj
+            segmentation_image = YOLOv8.to_segmentation_image(classes_ids, masks)
 
-        segmentation_msg = self.bridge.cv2_to_imgmsg(segmentation, encoding='passthrough')
+        segmentation_msg = self.bridge.cv2_to_imgmsg(segmentation_image, encoding='passthrough')
         segmentation_msg.header = image_msg.header
         self.segmentation_pub.publish(segmentation_msg)
 

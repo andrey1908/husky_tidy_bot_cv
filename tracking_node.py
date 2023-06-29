@@ -5,6 +5,7 @@ from cv_bridge import CvBridge
 import numpy as np
 import cv2
 from byte_track import ByteTrack
+from conversions import from_segmentation_image, to_tracking_image
 
 
 class ByteTrack_node(ByteTrack):
@@ -34,31 +35,8 @@ class ByteTrack_node(ByteTrack):
         else:
             raise RuntimeError("Unkown message type")
 
-        objects = np.unique(segmentation_image)
-        objects = objects[objects != 0]
-        masks = list()
-        boxes = list()
-        scores = list()
-        classes_ids = list()
-        for obj in objects:
-            mask = (segmentation_image == obj)
-            indices = np.where(mask)
-            min_x = indices[1].min()
-            min_y = indices[0].min()
-            max_x = indices[1].max()
-            max_y = indices[0].max()
-            box = np.array([min_x, min_y, max_x, max_y], dtype=int)
-            score = self.default_score
-            class_id = (obj >> 8) & 0xFF
-
-            masks.append(mask.astype(np.uint8))
-            boxes.append(box)
-            scores.append(score)
-            classes_ids.append(class_id)
-        masks = np.array(masks)
-        boxes = np.array(boxes)
-        scores = np.array(scores)
-
+        boxes, scores, classes_ids, masks = \
+            ByteTrack.from_segmentation_image(segmentation_image, default_score=self.default_score)
         tracked_objects = self.track(boxes, scores, classes_ids, masks=masks)
 
         if self.visualization:
@@ -66,11 +44,7 @@ class ByteTrack_node(ByteTrack):
             ByteTrack.draw_tracked_objects(tracking_image, tracked_objects,
                 palette=self.palette)
         else:
-            tracking_image = np.zeros_like(segmentation_image)
-            for tracked_object, class_id in tracked_objects:
-                obj = (class_id << 8) + tracked_object.track_id + 1
-                mask = tracked_object.mask
-                tracking_image[mask != 0] = obj
+            tracking_image = ByteTrack.to_tracking_image(tracked_objects, segmentation_image.shape)
 
         tracking_msg = self.bridge.cv2_to_imgmsg(tracking_image, encoding='passthrough')
         tracking_msg.header = segmentation_msg.header
