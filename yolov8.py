@@ -6,20 +6,21 @@ import numpy as np
 import cv2
 
 
-class YOLOv8:
+class YOLOv8(YOLO):
     def __init__(self, model_file, weights_file, min_score=0.7):
+        super().__init__(model_file)
+
         self.model_file = model_file
         self.weights_file = weights_file
         self.min_score = min_score
 
-        self.model = YOLO(self.model_file)
         weights = torch.load(self.weights_file)['model']
-        self.model.model.load(weights)
+        self.model.load(weights)
 
     def run(self, image):
         if isinstance(image, str):
             image = cv2.imread(image)
-        results = self.model(image, save=False, show=False, verbose=False)
+        results = self(image, save=False, show=False, verbose=False)
         height, width = image.shape[:2]
         scores, classes_ids, boxes, masks = preprocess_results(results, (height, width))
 
