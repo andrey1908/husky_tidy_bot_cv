@@ -77,7 +77,7 @@ class VILD_CLIP:
             (rescaled_detection_boxes[:, 2] - rescaled_detection_boxes[:, 0]) * \
             (rescaled_detection_boxes[:, 3] - rescaled_detection_boxes[:, 1])
 
-        nms_indices = self.nms(detection_boxes, roi_scores)
+        nms_indices = self._nms(detection_boxes, roi_scores)
         num = len(roi_boxes)
         indices = np.where(
             (np.isin(np.arange(num, dtype=int), nms_indices)) &
@@ -93,15 +93,15 @@ class VILD_CLIP:
 
         ymin, xmin, ymax, xmax = np.split(rescaled_detection_boxes, 4, axis=-1)
         processed_boxes = np.concatenate([xmin, ymin, xmax - xmin, ymax - ymin], axis=-1)
-        segmentations = VILD_CLIP.paste_instance_masks(
+        segmentations = VILD_CLIP._paste_instance_masks(
             detection_masks, processed_boxes, image_height, image_width)
 
         if self.use_clip_embeddings:
             image = np.asarray(Image.open(open(image_file, 'rb')).convert("RGB"))
-            visual_features = self.build_visual_embeddings(
+            visual_features = self._build_visual_embeddings(
                 image, rescaled_detection_boxes, segmentations)
 
-        text_features = self.build_text_embeddings(categories)
+        text_features = self._build_text_embeddings(categories)
         scores = np.matmul(visual_features, text_features.T)
         scores *= 100
         scores = softmax(scores, axis=-1)
@@ -120,7 +120,7 @@ class VILD_CLIP:
 
         return rescaled_detection_boxes, roi_scores, segmentations, scores
 
-    def build_text_embeddings(self, text):
+    def _build_text_embeddings(self, text):
         with torch.no_grad():
             tokens = clip.tokenize(text)
             tokens = tokens.cuda()
@@ -129,7 +129,7 @@ class VILD_CLIP:
             embeddings = embeddings.cpu().numpy()
         return embeddings
 
-    def build_visual_embeddings(self, image,
+    def _build_visual_embeddings(self, image,
             rescaled_detection_boxes, segmentations):
         image_height = image.shape[0]
         image_width = image.shape[1]
@@ -167,7 +167,7 @@ class VILD_CLIP:
         embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
         return embeddings
 
-    def nms(self, dets, scores, max_dets=1000):
+    def _nms(self, dets, scores, max_dets=1000):
         """ Non-maximum suppression.
         Args:
             dets: [N, 4]
@@ -201,9 +201,39 @@ class VILD_CLIP:
             inds = np.where(overlap <= self.nms_threshold)[0]
             order = order[inds + 1]
         return keep
-    
+
     @staticmethod
-    def expand_boxes(boxes, scale):
+    def draw_detections(image, rescaled_detection_boxes, segmentations,
+            roi_scores=None, scores=None):
+        box_to_display_str_map = collections.defaultdict(list)
+        box_to_color_map = collections.defaultdict(str)
+        box_to_instance_masks_map = {}
+        box_to_score_map = {}
+
+        for i in range(rescaled_detection_boxes.shape[0]):
+            box = tuple(rescaled_detection_boxes[i].tolist())
+            box_to_instance_masks_map[box] = segmentations[i]
+            box_to_color_map[box] = 'red'
+            box_to_score_map[box] = roi_scores[i]
+            box_to_display_str_map[box] = [
+                f"roi score: {roi_scores[i] * 100:.02f}%, "
+                f"category score: {np.max(scores[i]) * 100:.02f}%"]
+
+        box_color_iter = sorted(
+            box_to_color_map.items(), key=lambda kv: box_to_score_map[kv[0]])
+
+        for box, color in box_color_iter:
+            ymin, xmin, ymax, xmax = box
+            VILD_CLIP._draw_mask_on_image_array(image, box_to_instance_masks_map[box],
+                color=color, alpha=0.4)
+            VILD_CLIP._draw_bounding_box_on_image_array(image, ymin, xmin, ymax, xmax,
+                color=color, thickness=4, display_str_list=box_to_display_str_map[box],
+                use_normalized_coordinates=False)
+
+        return image
+
+    @staticmethod
+    def _expand_boxes(boxes, scale):
         """ Expands an array of boxes by a given scale. """
         # Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/utils/boxes.py#L227  # pylint: disable=line-too-long
         # The `boxes` in the reference implementation is in [x1, y1, x2, y2] form,
@@ -225,7 +255,7 @@ class VILD_CLIP:
         return boxes_exp
 
     @staticmethod
-    def paste_instance_masks(masks, detected_boxes, image_height, image_width):
+    def _paste_instance_masks(masks, detected_boxes, image_height, image_width):
         """ Paste instance masks to generate the image segmentation results.
 
         Args:
@@ -251,7 +281,7 @@ class VILD_CLIP:
         scale = max((mask_width + 2.0) / mask_width,
                     (mask_height + 2.0) / mask_height)
 
-        ref_boxes = VILD_CLIP.expand_boxes(detected_boxes, scale)
+        ref_boxes = VILD_CLIP._expand_boxes(detected_boxes, scale)
         ref_boxes = ref_boxes.astype(np.int32)
         padded_mask = np.zeros((mask_height + 2, mask_width + 2), dtype=np.float32)
         segmentations = []
@@ -285,37 +315,7 @@ class VILD_CLIP:
         return segmentations
 
     @staticmethod
-    def draw_detections(image, rescaled_detection_boxes, segmentations,
-            roi_scores=None, scores=None):
-        box_to_display_str_map = collections.defaultdict(list)
-        box_to_color_map = collections.defaultdict(str)
-        box_to_instance_masks_map = {}
-        box_to_score_map = {}
-
-        for i in range(rescaled_detection_boxes.shape[0]):
-            box = tuple(rescaled_detection_boxes[i].tolist())
-            box_to_instance_masks_map[box] = segmentations[i]
-            box_to_color_map[box] = 'red'
-            box_to_score_map[box] = roi_scores[i]
-            box_to_display_str_map[box] = [
-                f"roi score: {roi_scores[i] * 100:.02f}%, "
-                f"category score: {np.max(scores[i]) * 100:.02f}%"]
-
-        box_color_iter = sorted(
-            box_to_color_map.items(), key=lambda kv: box_to_score_map[kv[0]])
-
-        for box, color in box_color_iter:
-            ymin, xmin, ymax, xmax = box
-            VILD_CLIP.draw_mask_on_image_array(image, box_to_instance_masks_map[box],
-                color=color, alpha=0.4)
-            VILD_CLIP.draw_bounding_box_on_image_array(image, ymin, xmin, ymax, xmax,
-                color=color, thickness=4, display_str_list=box_to_display_str_map[box],
-                use_normalized_coordinates=False)
-
-        return image
-
-    @staticmethod
-    def draw_mask_on_image_array(image, mask, color='red', alpha=0.4):
+    def _draw_mask_on_image_array(image, mask, color='red', alpha=0.4):
         """Draws mask on an image.
 
         Args:
@@ -348,7 +348,7 @@ class VILD_CLIP:
         np.copyto(image, np.array(pil_image.convert('RGB')))
 
     @staticmethod
-    def draw_bounding_box_on_image_array(image, ymin, xmin, ymax, xmax,
+    def _draw_bounding_box_on_image_array(image, ymin, xmin, ymax, xmax,
             color='red', thickness=4, display_str_list=(), use_normalized_coordinates=True):
         """Adds a bounding box to an image (numpy array).
 
@@ -370,13 +370,13 @@ class VILD_CLIP:
             coordinates as absolute.
         """
         image_pil = Image.fromarray(np.uint8(image)).convert('RGB')
-        VILD_CLIP.draw_bounding_box_on_image(image_pil, ymin, xmin, ymax, xmax, color,
+        VILD_CLIP._draw_bounding_box_on_image(image_pil, ymin, xmin, ymax, xmax, color,
                                     thickness, display_str_list,
                                     use_normalized_coordinates)
         np.copyto(image, np.array(image_pil))
 
     @staticmethod
-    def draw_bounding_box_on_image(image, ymin, xmin, ymax, xmax,
+    def _draw_bounding_box_on_image(image, ymin, xmin, ymax, xmax,
             color='red', thickness=4, display_str_list=(), use_normalized_coordinates=True):
         """Adds a bounding box to an image.
 
