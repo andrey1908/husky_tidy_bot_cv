@@ -203,7 +203,7 @@ class VILD_CLIP:
         return keep
 
     @staticmethod
-    def draw_detections(image, rescaled_detection_boxes, segmentations,
+    def draw_segmentation(image, rescaled_detection_boxes, segmentations,
             roi_scores=None, scores=None):
         box_to_display_str_map = collections.defaultdict(list)
         box_to_color_map = collections.defaultdict(str)

@@ -35,7 +35,7 @@ class YOLOv8_node(YOLOv8):
         scores, classes_ids, boxes, masks = self.segment(image)
 
         if self.visualization:
-            YOLOv8.draw_detections(image, scores, classes_ids, boxes, masks, palette=self.palette)
+            YOLOv8.draw_segmentation(image, scores, classes_ids, boxes, masks, palette=self.palette)
             segmentation_image = image
         else:
             segmentation_image = YOLOv8.to_segmentation_image(classes_ids, masks)

@@ -33,7 +33,7 @@ class YOLOv8(YOLO):
         return scores, classes_ids, boxes, masks
 
     @staticmethod
-    def draw_detections(image, scores, classes_ids, boxes, masks, palette=((0, 0, 255),)):
+    def draw_segmentation(image, scores, classes_ids, boxes, masks, palette=((0, 0, 255),)):
         draw_detections(image, scores, classes_ids, boxes, masks,
             draw_boxes=False, draw_masks=True, palette=palette, min_score=0)
 
