@@ -2,27 +2,20 @@ import rospy
 import rostopic
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-import torch
-from ultralytics import YOLO
-from ultralytics.yolo.utils.ops import preprocess_results
 import numpy as np
 import cv2
+from yolov8 import YOLOv8
 
 
-class YOLOv8_segmentation:
+class YOLOv8_node(YOLOv8):
     def __init__(self, model_file, weights_file, image_topic, out_segmentation_topic,
             min_score=0.7, colorful=False, palette=((0, 0, 255),)):
-        self.model_file = model_file
-        self.weights_file = weights_file
+        super().__init__(model_file, weights_file, min_score=min_score)
+
         self.image_topic = image_topic
         self.out_segmentation_topic = out_segmentation_topic
-        self.min_score = min_score
         self.colorful = colorful
         self.palette = palette
-
-        self.model = YOLO(self.model_file)
-        weights = torch.load(self.weights_file)['model']
-        self.model.model.load(weights)
 
         self.segmentation_pub = rospy.Publisher(self.out_segmentation_topic, Image, queue_size=10)
         topic_type, _, _ = rostopic.get_topic_class(self.image_topic)
@@ -38,13 +31,12 @@ class YOLOv8_segmentation:
         else:
             raise RuntimeError("Unkown message type")
 
-        results = self.model(image, save=False, show=False, verbose=False)
-        height, width = image.shape[:2]
-        scores, classes_ids, masks = preprocess_results(results, (height, width))
+        scores, classes_ids, boxes, masks = self.run(image)
 
         if self.colorful:
             segmentation = np.zeros_like(image)
         else:
+            height, width = image.shape[:2]
             segmentation = np.zeros((height, width), dtype=np.uint16)
         for i, (score, class_id, mask) in enumerate(zip(scores, classes_ids, masks)):
             if score < self.min_score:
@@ -62,7 +54,7 @@ class YOLOv8_segmentation:
 
 if __name__ == "__main__":
     rospy.init_node("segmentation")
-    segmentation_node = YOLOv8_segmentation(
+    segmentation_node = YOLOv8_node(
         "/home/cds-jetson-host/ultralytics/yolov8n-seg-1class.yaml",
         "/home/cds-jetson-host/ultralytics/runs/segment/train2/weights/last.pt",
         "/camera/compressed", "/segmentation", colorful=False)
