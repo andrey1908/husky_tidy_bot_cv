@@ -14,6 +14,8 @@ class ObjectPoseEstimation:
         self.global_max_correspondence_distance = global_max_correspondence_distance
         self.max_correspondence_distances = max_correspondence_distances
 
+        assert np.all(self.D == 0), "Distorted images are not supported yet"
+
     def estimate_pose(self, mask, depth):
         self.extracted_pc = self.extract_pc(mask, depth)
         if len(self.extracted_pc.points) < 1000:
