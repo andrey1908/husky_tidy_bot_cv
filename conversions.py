@@ -42,8 +42,8 @@ def from_segmentation_image(segmentation_image, default_score=0.9):
 
 def to_tracking_image(classes_ids, tracking_ids, masks):
     height, width = masks.shape[1:]
-    tracking_image = np.zeros((height, width), dtype=np.uint16)
+    tracking_image = np.zeros((height, width), dtype=np.uint32)
     for class_id, tracking_id, mask in zip(classes_ids, tracking_ids, masks):
-        obj = (class_id << 8) + tracking_id + 1
+        obj = (class_id << 24) + tracking_id + 1
         tracking_image[mask != 0] = obj
     return tracking_image
