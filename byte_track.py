@@ -5,17 +5,12 @@ from conversions import from_segmentation_image, to_tracking_image
 
 
 class ByteTrack:
-    class BYTETracker_args:
-        def __init__(self, track_thresh, track_buffer, match_thresh, mot20):
-            self.track_thresh = track_thresh
-            self.track_buffer = track_buffer
-            self.match_thresh = match_thresh
-            self.mot20 = mot20
-
-    def __init__(self, frame_rate=10, track_thresh=0.1, track_buffer=10, match_thresh=0.9):
+    def __init__(self, track_thresh=0.1, track_buffer=30, match_thresh=0.9, frame_rate=30):
+        self.track_thresh = track_thresh
+        self.track_buffer = track_buffer
+        self.match_thresh = match_thresh
         self.frame_rate = frame_rate
-        mot20 = False
-        self.args = ByteTrack.BYTETracker_args(track_thresh, track_buffer, match_thresh, mot20)
+
         self.trackers = dict()
 
     def track(self, boxes, scores, classes_ids, masks=None):
@@ -23,7 +18,9 @@ class ByteTrack:
         tracked_objects = list()
         for class_id in unique_classes_ids:
             if class_id not in self.trackers:
-                self.trackers[class_id] = BYTETracker(self.args, self.frame_rate)
+                self.trackers[class_id] = BYTETracker(track_thresh=self.track_thresh,
+                    track_buffer=self.track_buffer, match_thresh=self.match_thresh,
+                    mot20=False, frame_rate=self.frame_rate)
             tracker = self.trackers[class_id]
 
             selected = (classes_ids == class_id)
