@@ -47,3 +47,32 @@ def to_tracking_image(classes_ids, tracking_ids, masks):
         obj = (class_id << 24) + tracking_id + 1
         tracking_image[mask != 0] = obj
     return tracking_image
+
+
+def from_tracking_image(tracking_image):
+    objects = np.unique(tracking_image)
+    objects = objects[objects != 0]
+    masks = list()
+    boxes = list()
+    classes_ids = list()
+    tracking_ids = list()
+    for obj in objects:
+        mask = (tracking_image == obj)
+        indices = np.where(mask)
+        min_x = indices[1].min()
+        min_y = indices[0].min()
+        max_x = indices[1].max()
+        max_y = indices[0].max()
+        box = np.array([min_x, min_y, max_x, max_y], dtype=int)
+        class_id = (obj >> 24) & 0xFF
+        tracking_id = obj & 0xFFFFFF
+
+        masks.append(mask.astype(np.uint8))
+        boxes.append(box)
+        classes_ids.append(class_id)
+        tracking_ids.append(tracking_id)
+    masks = np.array(masks)
+    boxes = np.array(boxes)
+    classes_ids = np.array(classes_ids)
+    tracking_ids = np.array(tracking_ids)
+    return classes_ids, tracking_ids, boxes, masks
