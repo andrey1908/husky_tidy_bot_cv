@@ -47,13 +47,15 @@ class ObjectPoseEstimation:
         return pose
 
     def extract_pc(self, mask, depth):
-        depth = depth.copy()
-        depth[mask == 0] = 0
-        depth = o3d.geometry.Image(depth)
+        masked_depth = depth.copy()
+        masked_depth[mask == 0] = 0
+        if masked_depth.dtype.byteorder != '=':
+            masked_depth = masked_depth.astype(masked_depth.dtype.newbyteorder('='))
+        masked_depth = o3d.geometry.Image(masked_depth)
         height, width = mask.shape[:2]
         intrinsic = o3d.camera.PinholeCameraIntrinsic(width, height, self.K)
         extracted_pc = o3d.geometry.PointCloud.create_from_depth_image(
-            depth, intrinsic, depth_scale=(1 / self.depth_scale))
+            masked_depth, intrinsic, depth_scale=(1 / self.depth_scale))
         return extracted_pc
 
     def _init_gt_pc(self):
