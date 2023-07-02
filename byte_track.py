@@ -14,8 +14,8 @@ class ByteTrack:
         self.trackers = dict()
 
     def track(self, boxes, scores, classes_ids, masks=None):
-        unique_classes_ids = np.unique(classes_ids)
         tracked_objects = list()
+        unique_classes_ids = np.unique(list(classes_ids) + list(self.trackers.keys()))
         for class_id in unique_classes_ids:
             if class_id not in self.trackers:
                 self.trackers[class_id] = BYTETracker(track_thresh=self.track_thresh,
@@ -28,11 +28,11 @@ class ByteTrack:
             selected_scores = scores[selected]
             selected_boxes_scores = \
                 np.hstack((selected_boxes, selected_scores[..., np.newaxis]))
-            tracked_objects_single = tracker.update(selected_boxes_scores,
+            tracked_objects_single_class = tracker.update(selected_boxes_scores,
                 (1, 1), (1, 1), masks=masks)
-            tracked_objects_single = \
-                zip(tracked_objects_single, [class_id] * len(tracked_objects_single))
-            tracked_objects.extend(tracked_objects_single)
+            tracked_objects_single_class = \
+                zip(tracked_objects_single_class, [class_id] * len(tracked_objects_single_class))
+            tracked_objects.extend(tracked_objects_single_class)
         return tracked_objects
     
     @staticmethod

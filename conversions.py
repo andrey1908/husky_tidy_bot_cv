@@ -33,10 +33,16 @@ def from_segmentation_image(segmentation_image, default_score=0.9):
         boxes.append(box)
         scores.append(score)
         classes_ids.append(class_id)
-    masks = np.array(masks)
-    boxes = np.array(boxes)
-    scores = np.array(scores)
-    classes_ids = np.array(classes_ids)
+    if len(masks) > 0:
+        masks = np.array(masks)
+        boxes = np.array(boxes)
+        scores = np.array(scores)
+        classes_ids = np.array(classes_ids)
+    else:
+        masks = np.empty((0, *segmentation_image.shape), dtype=np.uint8)
+        boxes = np.empty((0, 4), dtype=int)
+        scores = np.empty((0,))
+        classes_ids = np.empty((0,), dtype=int)
     return classes_ids, scores, boxes, masks
 
 
@@ -71,8 +77,14 @@ def from_tracking_image(tracking_image):
         boxes.append(box)
         classes_ids.append(class_id)
         tracking_ids.append(tracking_id)
-    masks = np.array(masks)
-    boxes = np.array(boxes)
-    classes_ids = np.array(classes_ids)
-    tracking_ids = np.array(tracking_ids)
+    if len(masks) > 0:
+        masks = np.array(masks)
+        boxes = np.array(boxes)
+        classes_ids = np.array(classes_ids)
+        tracking_ids = np.array(tracking_ids)
+    else:
+        masks = np.empty((0, *tracking_image.shape), dtype=np.uint8)
+        boxes = np.empty((0, 4), dtype=int)
+        classes_ids = np.empty((0,), dtype=int)
+        tracking_ids = np.empty((0,), dtype=int)
     return classes_ids, tracking_ids, boxes, masks
