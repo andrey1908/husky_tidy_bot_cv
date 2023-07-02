@@ -6,13 +6,16 @@ from segment_by_color import refine_mask_by_polygons, get_sv
 
 class ObjectPoseEstimation:
     def __init__(self, voxel_size, depth_scale, K, D,
-            global_max_correspondence_distance, max_correspondence_distances):
+            global_max_correspondence_distance, max_correspondence_distances,
+            *get_gt_pc_args, **get_gt_pc_kwargs):
         self.voxel_size = voxel_size
         self.depth_scale = depth_scale
         self.K = K
         self.D = D
         self.global_max_correspondence_distance = global_max_correspondence_distance
         self.max_correspondence_distances = max_correspondence_distances
+
+        self._init_gt_pc(*get_gt_pc_args, **get_gt_pc_kwargs)
 
         assert np.all(self.D == 0), "Distorted images are not supported yet"
 
@@ -58,11 +61,12 @@ class ObjectPoseEstimation:
             masked_depth, intrinsic, depth_scale=(1 / self.depth_scale))
         return extracted_pc
 
-    def _init_gt_pc(self):
-        self.gt_pc = self._get_gt_pc()
+    def _init_gt_pc(self, *get_gt_pc_args, **get_gt_pc_kwargs):
+        self.gt_pc = self._get_gt_pc(*get_gt_pc_args, **get_gt_pc_kwargs)
         self.gt_pc_down, self.gt_fpfh = self._prepare_pc(self.gt_pc, no_noise_allowed=True)
 
-    def _get_gt_pc(self):
+    @staticmethod
+    def _get_gt_pc(*args, **kwargs):
         raise NotImplementedError()
 
     def _prepare_pc(self, pc, no_noise_allowed=False):
@@ -162,37 +166,42 @@ class BoxPoseEstimation(ObjectPoseEstimation):
     def __init__(self, edges_sizes, edge_points_per_cm, voxel_size, depth_scale, K, D,
             global_max_correspondence_distance, max_correspondence_distances):
         super().__init__(voxel_size, depth_scale, K, D,
-            global_max_correspondence_distance, max_correspondence_distances)
+            global_max_correspondence_distance, max_correspondence_distances,
+            edges_sizes, edge_points_per_cm)
 
         self.edges_sizes = edges_sizes
         self.edge_points_per_cm = edge_points_per_cm
-        super()._init_gt_pc()
 
-    def _get_gt_pc(self):
-        return self._get_box_pc()
+    @staticmethod
+    def _get_gt_pc(edges_sizes, edge_points_per_cm):
+        return BoxPoseEstimation._get_box_pc(edges_sizes, edge_points_per_cm)
 
-    def _get_box_pc(self):
-        box_points = self._get_box_points()
+    @staticmethod
+    def _get_box_pc(edges_sizes, edge_points_per_cm):
+        box_points = BoxPoseEstimation._get_box_points(edges_sizes, edge_points_per_cm)
         box_pc = o3d.geometry.PointCloud()
         box_pc.points = o3d.utility.Vector3dVector(box_points)
         return box_pc
 
-    def _get_box_points(self):
+    @staticmethod
+    def _get_box_points(edges_sizes, edge_points_per_cm):
         faces = list()
         for axis_index in (0, 1, 2):
-            axis_size = self.edges_sizes[axis_index]
+            axis_size = edges_sizes[axis_index]
             for displacement in (-axis_size / 2, axis_size / 2):
-                face = self._get_box_face(axis_index, displacement)
+                face = BoxPoseEstimation._get_box_face(edges_sizes, edge_points_per_cm,
+                    axis_index, displacement)
                 faces.append(face)
         points = np.vstack(faces)
         return points
 
-    def _get_box_face(self, axis_index, displacement):
+    @staticmethod
+    def _get_box_face(edges_sizes, edge_points_per_cm, axis_index, displacement):
         face_axes_indices = np.delete(np.array([0, 1, 2]), axis_index)
-        face_edges_sizes = self.edges_sizes[face_axes_indices]
+        face_edges_sizes = edges_sizes[face_axes_indices]
         face = np.mgrid[
-            -face_edges_sizes[0] / 2 : face_edges_sizes[0] / 2 : int(face_edges_sizes[0] * 100 * self.edge_points_per_cm) * 1j,
-            -face_edges_sizes[1] / 2 : face_edges_sizes[1] / 2 : int(face_edges_sizes[1] * 100 * self.edge_points_per_cm) * 1j]
+            -face_edges_sizes[0] / 2 : face_edges_sizes[0] / 2 : int(face_edges_sizes[0] * 100 * edge_points_per_cm) * 1j,
+            -face_edges_sizes[1] / 2 : face_edges_sizes[1] / 2 : int(face_edges_sizes[1] * 100 * edge_points_per_cm) * 1j]
         face = face.reshape(2, -1).swapaxes(0, 1)
         face = np.hstack((face, np.full((len(face), 1), displacement)))
         axes_order = np.hstack((face_axes_indices, axis_index))
