@@ -31,14 +31,14 @@ class ByteTrack:
             tracked_objects_single_class = tracker.update(selected_boxes_scores,
                 (1, 1), (1, 1), masks=masks)
             tracked_objects_single_class = \
-                zip(tracked_objects_single_class, [class_id] * len(tracked_objects_single_class))
+                zip([class_id] * len(tracked_objects_single_class), tracked_objects_single_class)
             tracked_objects.extend(tracked_objects_single_class)
         return tracked_objects
     
     @staticmethod
     def draw_tracked_objects(image, tracked_objects, draw_boxes=False,
             palette=((0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 0, 255), (0, 255, 255))):
-        for tracked_object, class_id in tracked_objects:
+        for class_id, tracked_object in tracked_objects:
             color = palette[tracked_object.track_id % len(palette)]
             mask = tracked_object.mask
             image[mask != 0] = color
@@ -62,7 +62,7 @@ class ByteTrack:
         else:
             classes_ids, tracking_ids, masks = \
                 zip(*[(class_id, tracked_object.track_id, tracked_object.mask)
-                    for tracked_object, class_id in tracked_objects])
+                    for class_id, tracked_object in tracked_objects])
             masks = np.array(masks)
             assert tuple(out_shape) == masks.shape[1:]
         tracking_image = to_tracking_image(classes_ids, tracking_ids, masks)
