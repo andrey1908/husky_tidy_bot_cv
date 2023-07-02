@@ -15,18 +15,20 @@ def get_depth_scale(depth):
 
 
 class TrackedObject:
-    def __init__(self, tracking_id, pose, class_id):
+    def __init__(self, tracking_id, pose, class_id, frame_id):
         self.tracking_id = tracking_id
         self.pose = pose  # [x, y, z, 1.]
         self.class_id = class_id
+        self.last_frame_id = frame_id
         self.tracklet_len = 1
 
-    def update(self, pose):
+    def update(self, pose, frame_id):
         k = self.tracklet_len / (self.tracklet_len + 1)
         max_k = 0.8
         k = min(k, max_k)
         self.pose = k * self.pose + (1 - k) * pose
         self.pose[3] = 1
+        self.last_frame_id = frame_id
         self.tracklet_len += 1
 
     def is_visible(self, camera_pose_inv, depth, K, D):
@@ -69,12 +71,15 @@ class Tracker3D:
         self.K = K
         self.D = D
 
+        self.frame_id = 0
         self.tracked_objects = list()
 
         assert np.all(self.D == 0), "Distorted images are not supported yet"
 
     def update(self, camera_pose, depth, classes_ids, tracking_ids, masks):
-        objects_poses_in_camera = self.get_objects_poses(depth, masks)
+        self.frame_id += 1
+
+        objects_poses_in_camera = self._get_objects_poses(depth, masks)
         objects_poses_in_camera = np.hstack((objects_poses_in_camera, np.ones((len(objects_poses_in_camera), 1))))
         objects_poses_in_camera = np.expand_dims(objects_poses_in_camera, axis=-1)
         objects_poses = np.matmul(camera_pose, objects_poses_in_camera)
@@ -84,27 +89,61 @@ class Tracker3D:
             ### set status Lost
             pass
 
+        # update tracked objects
         unused_indices = list()
         for i, (object_pose, class_id, tracking_id) in \
                 enumerate(zip(objects_poses, classes_ids, tracking_ids)):
             for tracked_object in self.tracked_objects:
                 if tracked_object.tracking_id == tracking_id:
                     assert tracked_object.class_id == class_id
-                    tracked_object.update(object_pose)
+                    tracked_object.update(object_pose, self.frame_id)
                     ### set status Tracked
                     break
             else:
                 unused_indices.append(i)
 
+        # add new objects
         new_objects_poses = objects_poses[unused_indices]
         new_classes_ids = classes_ids[unused_indices]
         new_tracking_ids = tracking_ids[unused_indices]
         for new_object_pose, new_class_id, new_tracking_id in \
                 zip(new_objects_poses, new_classes_ids, new_tracking_ids):
-            new_tracked_object = TrackedObject(new_tracking_id, new_object_pose, new_class_id)
+            new_tracked_object = TrackedObject(new_tracking_id, new_object_pose,
+                new_class_id, self.frame_id)
             self.tracked_objects.append(new_tracked_object)
 
-    def get_objects_poses(self, depth, masks):
+        # merge close objects (just remove one of them)
+        distances_table = self._get_distances_table()
+        min_dist_thresh = 0.07
+        distances_table[np.tril_indices(len(distances_table))] = min_dist_thresh + 1
+        merge_indices = np.where(distances_table < min_dist_thresh)
+        distances = distances_table[merge_indices]
+        distances_with_indices = list(zip(distances, *merge_indices))
+        distances_with_indices = sorted(distances_with_indices)
+        used_indices = set()
+        remove_indices = list()
+        for dist, i, j in distances_with_indices:
+            if i in used_indices or j in used_indices:
+                continue
+            remove_indices.append(i)
+            used_indices.add(i)
+            used_indices.add(j)
+        for remove_index in sorted(remove_indices, reverse=True):
+            del self.tracked_objects[remove_index]
+
+        # remove disappeared objects
+        remove_indices = list()
+        camera_pose_inv = np.linalg.inv(camera_pose)
+        for i, tracked_object in enumerate(self.tracked_objects):
+            visible = tracked_object.is_visible(camera_pose_inv, depth, self.K, self.D)
+            frame_diff = self.frame_id - tracked_object.last_frame_id
+            max_frame_diff = 2  # including
+            if visible and frame_diff > max_frame_diff:
+                remove_indices.append(i)
+        for remove_index in sorted(remove_indices, reverse=True):
+            del self.tracked_objects[remove_index]
+
+    def _get_objects_poses(self, depth, masks):
         depth_scale = get_depth_scale(depth)
         object_poses = list()
         for mask in masks:
@@ -127,6 +166,15 @@ class Tracker3D:
             object_poses = np.empty((0, 3))
 
         return object_poses
+
+    def _get_distances_table(self):
+        object_poses = [tracked_object.pose for tracked_object in self.tracked_objects]
+        object_poses = np.array(object_poses)
+        object_poses_1 = np.tile(object_poses, (len(object_poses), 1, 1))
+        object_poses_2 = np.swapaxes(object_poses_1, axis1=0, axis2=1)
+        diff = object_poses_1 - object_poses_2
+        distances_table = np.linalg.norm(diff, axis=-1)
+        return distances_table
 
     @staticmethod
     def from_tracking_image(tracking_image):
