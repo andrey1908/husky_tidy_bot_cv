@@ -17,7 +17,7 @@ class ObjectPoseEstimation:
         assert np.all(self.D == 0), "Distorted images are not supported yet"
 
     def estimate_pose(self, mask, depth):
-        self.extracted_pc = self.extract_pc(mask, depth)
+        self.extracted_pc = self._extract_pc(mask, depth)
         if len(self.extracted_pc.points) < 1000:
             self.reason = \
                 f"Too few points in extracted point cloud " \
@@ -46,7 +46,7 @@ class ObjectPoseEstimation:
 
         return pose
 
-    def extract_pc(self, mask, depth):
+    def _extract_pc(self, mask, depth):
         masked_depth = depth.copy()
         masked_depth[mask == 0] = 0
         if masked_depth.dtype.byteorder != '=':
